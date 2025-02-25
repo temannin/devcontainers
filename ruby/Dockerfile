@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-LABEL org.opencontainers.image.source https://github.com/temanning/devcontainers
+LABEL org.opencontainers.image.source https://github.com/temannin/devcontainers
 
 ENV DEBIAN_FRONTEND=noninteractive
 
