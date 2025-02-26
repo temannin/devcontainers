@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies
 RUN apt-get update -y && \
-    apt-get install -y build-essential curl git sudo bash zlib1g-dev tzdata && \
+    apt-get install -y build-essential curl git sudo bash zlib1g-dev tzdata libsqlite3-dev && \
     useradd -m -s /bin/bash devuser && \
     echo "devuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
