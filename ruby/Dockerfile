@@ -1,4 +1,5 @@
-FROM ubuntu:24.04
+# Use a multi-arch base image, platform is dynamically selected by Buildx
+FROM --platform=$BUILDPLATFORM ruby:3.4.2
 
 LABEL org.opencontainers.image.source=https://github.com/temannin/devcontainers
 
@@ -14,16 +15,15 @@ RUN apt-get update -y && \
 USER devuser
 WORKDIR /home/devuser
 
-# Install Homebrew (as devuser)
-RUN /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Configure Homebrew for devuser
-RUN echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc && \
-    echo 'bash -c "source ~/.bashrc"' >> ~/.profile
-
-# Install rbenv (as devuser)
-RUN /home/linuxbrew/.linuxbrew/bin/brew install rbenv && \
+# Conditionally install Homebrew and rbenv (only for non-ARM platforms)
+RUN if [ "$(uname -m)" != "aarch64" ]; then \
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
+    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc && \
+    echo 'bash -c "source ~/.bashrc"' >> ~/.profile && \
+    /home/linuxbrew/.linuxbrew/bin/brew install rbenv && \
     echo 'eval "$(rbenv init -)"' >> ~/.bashrc && \
-    bash -c "source ~/.bashrc"
+    bash -c "source ~/.bashrc"; \
+    fi
 
+# Default command
 CMD ["/bin/bash"]
