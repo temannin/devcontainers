@@ -24,7 +24,7 @@ RUN wget https://github.com/postmodern/ruby-install/releases/download/v0.10.1/ru
 # Cleanup
 RUN rm -rf ruby-install-0.10.1.tar.gz ruby-install-0.10.1
 
-RUN $ sudo ruby-install --system ruby 3.4.2
+RUN /bin/bash -c "sudo ruby-install --system ruby 3.4.2"
 
 # Default command
 CMD ["/bin/bash"]
