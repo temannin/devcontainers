@@ -15,15 +15,5 @@ RUN apt-get update -y && \
 USER devuser
 WORKDIR /home/devuser
 
-# Conditionally install Homebrew and rbenv (only for non-ARM platforms)
-RUN if [ "$(uname -m)" != "aarch64" ]; then \
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && \
-    echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.bashrc && \
-    echo 'bash -c "source ~/.bashrc"' >> ~/.profile && \
-    /home/linuxbrew/.linuxbrew/bin/brew install rbenv && \
-    echo 'eval "$(rbenv init -)"' >> ~/.bashrc && \
-    bash -c "source ~/.bashrc"; \
-    fi
-
 # Default command
 CMD ["/bin/bash"]
