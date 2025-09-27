@@ -63,17 +63,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate safe image name
+        id: safe-name
+        run: |
+          # Replace forward slashes with hyphens for Docker image names
+          SAFE_IMAGE_NAME=$(echo "${{ matrix.image }}" | sed 's/\//-/g')
+          echo "safe_name=$SAFE_IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "Original image path: ${{ matrix.image }}"
+          echo "Safe image name: $SAFE_IMAGE_NAME"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ matrix.image }}-{{date 'YYYYMMDD'}}-{{sha}},enable={{is_default_branch}}
+            type=raw,value=${{ steps.safe-name.outputs.safe_name }}-{{date 'YYYYMMDD'}}-{{sha}},enable={{is_default_branch}}
 
       - name: Generate version
         id: version
@@ -90,15 +99,15 @@ jobs:
         id: build
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.image }}
+          context: .
           file: ./${{ matrix.image }}/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ matrix.image }}-${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ matrix.image }}-${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.version.outputs.version }}
           labels: |
             org.opencontainers.image.title=${{ matrix.image }} devcontainer
             org.opencontainers.image.description=Devcontainer image for ${{ matrix.image }}
@@ -122,15 +131,15 @@ jobs:
           | **Build Date** | \`$(date -u +"%Y-%m-%d %H:%M:%S UTC")\` |
           
           ### 🏷️ Image Tags
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:latest\`
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ matrix.image }}-${{ steps.version.outputs.version }}\`
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ matrix.image }}-${{ github.sha }}\`
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ steps.version.outputs.version }}\`
+          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest\`
+          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ steps.version.outputs.version }}\`
+          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ github.sha }}\`
+          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.version.outputs.version }}\`
           
           ### 🚀 Usage
           \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:latest
-          docker run -it --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:latest
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest
+          docker run -it --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest
           \`\`\`
           
           ---
@@ -150,27 +159,37 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Generate safe image name for test
+        id: test-safe-name
+        run: |
+          # Replace forward slashes with hyphens for Docker image names
+          SAFE_IMAGE_NAME=$(echo "${{ matrix.image }}" | sed 's/\//-/g')
+          echo "safe_name=$SAFE_IMAGE_NAME" >> $GITHUB_OUTPUT
+
       - name: Build Docker image (test)
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.image }}
+          context: .
           file: ./${{ matrix.image }}/Dockerfile
           platforms: linux/amd64
           push: false
-          tags: ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test
+          tags: ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test
 
       - name: Test Docker image
         run: |
           # Basic smoke test - ensure the image can run
-          docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test echo "Image test successful"
+          docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test echo "Image test successful"
           
           # Test that the expected tools are available
           case "${{ matrix.image }}" in
             "base")
-              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test which git curl wget
+              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test which git curl wget
+              ;;
+            "java/17")
+              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test java --version
               ;;
             "ruby")
-              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test ruby --version
+              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test ruby --version
               ;;
           esac
 
