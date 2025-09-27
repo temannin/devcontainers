@@ -70,7 +70,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:latest
 
   build-and-push:
-    needs: detect-images
+    needs: [detect-images, build-foundation-images]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
