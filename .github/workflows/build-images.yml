@@ -49,6 +49,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+        #login to registry
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
         
         # build lite image
       - name: Build lite image
@@ -58,7 +67,10 @@ jobs:
           file: ./lite/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:${{ github.sha }}-${{ github.ref_name }}
 
       - name: Build base image
         uses: docker/build-push-action@v5
@@ -67,7 +79,10 @@ jobs:
           file: ./base/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:${{ github.sha }}-${{ github.ref_name }}
 
   build-and-push:
     needs: [detect-images, build-foundation-images]
