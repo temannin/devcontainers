@@ -35,12 +35,39 @@ jobs:
         run: |
           # Find all directories containing Dockerfile
           IMAGES=$(find . -name "Dockerfile" -not -path "./.git/*" | xargs -I {} dirname {} | sed 's|^\./||' | sort)
-          
+
+          # remove base and lite from list
+          IMAGES=$(echo "$IMAGES" | grep -v -E '^(base|lite)$')
           # Convert to JSON array
           IMAGES_JSON=$(echo "$IMAGES" | jq -R -s -c 'split("\n")[:-1]')
           
           echo "images=$IMAGES_JSON" >> $GITHUB_OUTPUT
           echo "Detected images: $IMAGES_JSON"
+
+  build-foundation-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+        # build lite image
+      - name: Build lite image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./lite/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:latest
+
+      - name: Build base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./base/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:latest
 
   build-and-push:
     needs: detect-images
