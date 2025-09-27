@@ -35,15 +35,42 @@ jobs:
         run: |
           # Find all directories containing Dockerfile
           IMAGES=$(find . -name "Dockerfile" -not -path "./.git/*" | xargs -I {} dirname {} | sed 's|^\./||' | sort)
+
+          # remove base and lite from list
+          IMAGES=$(echo "$IMAGES" | grep -v "base" | grep -v "lite")
           
           # Convert to JSON array
-          IMAGES_JSON=$(echo "$IMAGES" | jq -R -s -c 'split("\n")[:-1]')
+          IMAGES_JSON=$(echo "$IMAGES" | jq -R -s -c 'split("\n")[:-1]')         
           
           echo "images=$IMAGES_JSON" >> $GITHUB_OUTPUT
           echo "Detected images: $IMAGES_JSON"
+  
+  build-base-and-lite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and push lite image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./lite/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:latest
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./base/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:latest
 
   build-and-push:
-    needs: detect-images
+    needs: [detect-images, build-base-and-lite]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
