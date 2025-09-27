@@ -71,24 +71,19 @@ WORKDIR /home/$USERNAME
 # Install oh-my-zsh
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
-RUN (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-    && sudo mkdir -p -m 755 /etc/apt/keyrings \
-    && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-    && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-    && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && sudo mkdir -p -m 755 /etc/apt/sources.list.d \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-    && sudo apt update \
-    && sudo apt install gh -y
+# Install latest GitHub CLI
+RUN GH_VERSION=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep '"tag_name"' | cut -d'"' -f4) \
+  && wget https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.deb \
+  && sudo dpkg -i gh_${GH_VERSION#v}_linux_amd64.deb \
+  && rm gh_${GH_VERSION#v}_linux_amd64.deb
 
 ENV GITHUB_TOKEN=""
 # RUN gh auth login if GITHUB_TOKEN is not empty
 RUN <<EOF
-if [ ! -z "$GITHUB_TOKEN" ]; then
-    gh auth login --with-token
-fi
+    if [ ! -z "$GITHUB_TOKEN" ]; then
+        gh auth login --with-token
+    fi
 EOF
-
 
 
 # Default command
