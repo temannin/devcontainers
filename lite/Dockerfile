@@ -1,5 +1,5 @@
 # Base devcontainer image based on Ubuntu LTS
-FROM ubuntu:22.04
+FROM ubuntu:latest
 
 LABEL org.opencontainers.image.source=https://github.com/temannin/devcontainers
 
@@ -46,7 +46,7 @@ RUN apt-get update && apt-get install -y \
 
 # Create a non-root user for development
 ARG USERNAME=vscode
-ARG USER_UID=1000
+ARG USER_UID=1001
 ARG USER_GID=$USER_UID
 
 # Create the user
