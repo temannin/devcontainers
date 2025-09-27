@@ -105,8 +105,6 @@ RUN ARCH=$(dpkg --print-architecture) \
   && sudo dpkg -i gh_${GH_VERSION#v}_linux_${ARCH}.deb || sudo apt-get install -f -y \
   && rm gh_${GH_VERSION#v}_linux_${ARCH}.deb
 
-
-
 ENV GITHUB_TOKEN=""
 # RUN gh auth login if GITHUB_TOKEN is not empty
 RUN <<EOF
