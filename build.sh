@@ -4,10 +4,15 @@
 IMAGE_NAME=$1
 
 # create a SSH pub/priv key pair where it will go to ~/.ssh/id_rsa.pub
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+# auto overwrite the existing key if it exists
+if [ -f ~/.ssh/devcontainer_id_rsa.pub ]; then
+    rm ~/.ssh/devcontainer_id_rsa
+    rm ~/.ssh/devcontainer_id_rsa.pub
+fi
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/devcontainer_id_rsa -N ""
 
 # build the image in directory $IMAGE_NAME
-docker build -t $IMAGE_NAME --build-arg SSH_PUBLIC_KEY="$(cat ~/.ssh/id_rsa.pub)" -f $IMAGE_NAME/Dockerfile .
+docker build -t $IMAGE_NAME --build-arg SSH_PUBLIC_KEY="$(cat ~/.ssh/devcontainer_id_rsa.pub)" -f $IMAGE_NAME/Dockerfile .
 
 # if build is successful, run the image
 if [ $? -eq 0 ]; then
