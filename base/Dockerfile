@@ -1,7 +1,7 @@
 # Base devcontainer image based on Ubuntu LTS
 FROM ubuntu:22.04
 
-LABEL org.opencontainers.image.source https://github.com/temannin/devcontainers
+LABEL org.opencontainers.image.source=https://github.com/temannin/devcontainers
 
 # Avoid prompts from apt
 ENV DEBIAN_FRONTEND=noninteractive
@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     zip \
     tar \
     gzip \
+    zsh \
     # Build tools
     build-essential \
     cmake \
@@ -67,8 +68,8 @@ USER $USERNAME
 # Set working directory
 WORKDIR /home/$USERNAME
 
-# Set default shell
-SHELL ["/bin/bash", "-c"]
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
 
 # Default command
-CMD ["/bin/bash"]
+CMD ["/bin/zsh"]

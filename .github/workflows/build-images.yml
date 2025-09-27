@@ -1,0 +1,142 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**/Dockerfile'
+      - '.github/workflows/build-images.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - '**/Dockerfile'
+      - '.github/workflows/build-images.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_PREFIX: ${{ github.repository_owner }}/devcontainers
+
+jobs:
+  detect-images:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.detect.outputs.images }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect Docker images
+        id: detect
+        run: |
+          # Find all directories containing Dockerfile
+          IMAGES=$(find . -name "Dockerfile" -not -path "./.git/*" | xargs -I {} dirname {} | sed 's|^\./||' | sort)
+          
+          # Convert to JSON array
+          IMAGES_JSON=$(echo "$IMAGES" | jq -R -s -c 'split("\n")[:-1]')
+          
+          echo "images=$IMAGES_JSON" >> $GITHUB_OUTPUT
+          echo "Detected images: $IMAGES_JSON"
+
+  build-and-push:
+    needs: detect-images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        image: ${{ fromJson(needs.detect-images.outputs.images) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ matrix.image }}-{{date 'YYYYMMDD'}}-{{sha}},enable={{is_default_branch}}
+
+      - name: Generate version
+        id: version
+        run: |
+          # Generate a version based on date and commit
+          DATE=$(date +%Y%m%d)
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          VERSION="${DATE}-${SHORT_SHA}"
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.image }}
+          file: ./${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ matrix.image }}-${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ matrix.image }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image }} devcontainer
+            org.opencontainers.image.description=Devcontainer image for ${{ matrix.image }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+  test-images:
+    needs: [detect-images, build-and-push]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        image: ${{ fromJson(needs.detect-images.outputs.images) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (test)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.image }}
+          file: ./${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test
+
+      - name: Test Docker image
+        run: |
+          # Basic smoke test - ensure the image can run
+          docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test echo "Image test successful"
+          
+          # Test that the expected tools are available
+          case "${{ matrix.image }}" in
+            "base")
+              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test which git curl wget
+              ;;
+            "ruby")
+              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ matrix.image }}:test ruby --version
+              ;;
+          esac
+
