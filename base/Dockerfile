@@ -6,6 +6,8 @@ LABEL org.opencontainers.image.source=https://github.com/temannin/devcontainers
 # Avoid prompts from apt
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN sudo apt-get update && sudo apt-get install openssh-server -y
+
 # Create .ssh directory and add the SSH public key if SSH_PUBLIC_KEY is not empty
 RUN if [ ! -z "$SSH_PUBLIC_KEY" ]; then \
     mkdir -p /home/$USERNAME/.ssh \
@@ -31,21 +33,16 @@ RUN echo '#!/bin/bash' | sudo tee /usr/local/bin/start-devcontainer.sh \
 
 EXPOSE 22
 
-# Switch to the non-root user
-USER $USERNAME
-
-# Set working directory
-WORKDIR /home/$USERNAME
-
 # Install oh-my-zsh
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 # Install latest GitHub CLI (architecture-aware)
-# RUN ARCH=$(dpkg --print-architecture) \
-#   && GH_VERSION=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep '"tag_name"' | cut -d'"' -f4) \
-#   && wget https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_${ARCH}.deb \
-#   && dpkg -i gh_${GH_VERSION#v}_linux_${ARCH}.deb || sudo apt-get install -f -y \
-#   && rm gh_${GH_VERSION#v}_linux_${ARCH}.deb
+RUN ARCH=$(dpkg --print-architecture) \
+  && GH_VERSION=$(curl -s https://api.github.com/repos/cli/cli/releases/latest | grep '"tag_name"' | cut -d'"' -f4) \
+  && GH_VERSION_NO_V=$(echo "$GH_VERSION" | sed 's/^v//') \
+  && wget "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION_NO_V}_linux_${ARCH}.deb" \
+  && sudo dpkg -i "gh_${GH_VERSION_NO_V}_linux_${ARCH}.deb" || sudo apt-get install -f -y \
+  && rm "gh_${GH_VERSION_NO_V}_linux_${ARCH}.deb"
 
 ENV GITHUB_TOKEN=""
 # RUN gh auth login if GITHUB_TOKEN is not empty
