@@ -13,6 +13,10 @@ on:
       - '.github/workflows/build-images.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME_PREFIX: ${{ github.repository_owner }}/devcontainers
