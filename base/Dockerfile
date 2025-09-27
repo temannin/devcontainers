@@ -85,6 +85,5 @@ RUN <<EOF
     fi
 EOF
 
-
 # Default command
 CMD ["/bin/zsh"]
