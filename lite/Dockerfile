@@ -45,9 +45,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for development
-ARG USERNAME=vscode
-ARG USER_UID=1001
-ARG USER_GID=$USER_UID
+ENV USERNAME=vscode
+ENV USER_UID=1001
+ENV USER_GID=$USER_UID
 
 # Create the user
 RUN groupadd --gid $USER_GID $USERNAME \
