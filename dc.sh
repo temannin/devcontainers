@@ -58,9 +58,9 @@ docker build -t $IMAGE_NAME --build-arg SSH_PUBLIC_KEY="$(cat ~/.ssh/$SAFE_IMAGE
 # if build is successful, run the image
 if [ $? -eq 0 ]; then
     if [ "$DOCKER_IN_DOCKER" = "true" ]; then
-        docker run -e GITHUB_TOKEN=$(gh auth token) -p 2222:22 --rm -it -v /var/run/docker.sock:/var/run/docker.sock $DOCKER_RUN_ARGS $IMAGE_NAME
-    else
-        docker run -e GITHUB_TOKEN=$(gh auth token) -p 2222:22 --rm -it $DOCKER_RUN_ARGS $IMAGE_NAME
-    fi
+        $MOUNT_DOCKER_SOCKET = "-v /var/run/docker.sock:/var/run/docker.sock"   
+    fi     
+    
+    docker run -e GITHUB_TOKEN=$(gh auth token) -p 2222:22 --rm -it $DOCKER_RUN_ARGS $MOUNT_DOCKER_SOCKET $IMAGE_NAME
 fi
 
