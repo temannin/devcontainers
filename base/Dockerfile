@@ -1,35 +1,15 @@
 # Base devcontainer image based on Ubuntu LTS
 FROM ghcr.io/temannin/devcontainers-lite:latest
 
+# build command: 
+# docker build -t ghcr.io/temannin/devcontainers-base:latest -f base/Dockerfile .
+
 LABEL org.opencontainers.image.source=https://github.com/temannin/devcontainers
 
 # Avoid prompts from apt
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN sudo apt-get update && sudo apt-get install openssh-server -y
-
-# Create .ssh directory and add the SSH public key if SSH_PUBLIC_KEY is not empty
-RUN if [ ! -z "$SSH_PUBLIC_KEY" ]; then \
-    mkdir -p /home/$USERNAME/.ssh \
-    && echo "$SSH_PUBLIC_KEY" > /home/$USERNAME/.ssh/authorized_keys \
-    && chmod 700 /home/$USERNAME/.ssh \
-    && chmod 600 /home/$USERNAME/.ssh/authorized_keys \
-    && chown -R $USERNAME:$USERNAME /home/$USERNAME/.ssh; \
-fi
-
-# Configure SSH server
-RUN sudo mkdir /var/run/sshd \
-  && echo 'PermitRootLogin no' | sudo tee -a /etc/ssh/sshd_config \
-  && echo 'PasswordAuthentication no' | sudo tee -a /etc/ssh/sshd_config \
-  && echo 'PubkeyAuthentication yes' | sudo tee -a /etc/ssh/sshd_config \
-  && echo 'X11Forwarding yes' | sudo tee -a /etc/ssh/sshd_config \
-  && echo "AllowUsers $USERNAME" | sudo tee -a /etc/ssh/sshd_config
-
-  # Create startup script to run SSH server and shell
-RUN echo '#!/bin/bash' | sudo tee /usr/local/bin/start-devcontainer.sh \
-  && echo 'sudo service ssh start' | sudo tee -a /usr/local/bin/start-devcontainer.sh \
-  && echo 'exec "$@"' | sudo tee -a /usr/local/bin/start-devcontainer.sh \
-  && sudo chmod +x /usr/local/bin/start-devcontainer.sh
 
 EXPOSE 22
 
@@ -52,5 +32,9 @@ RUN <<EOF
     fi
 EOF
 
-# Default command - start SSH server and shell
-CMD ["/usr/local/bin/start-devcontainer.sh", "/bin/zsh"]
+USER root
+
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+RUN echo "$USERNAME:changeme" | chpasswd
+
+USER $USERNAME
