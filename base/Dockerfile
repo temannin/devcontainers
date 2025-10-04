@@ -24,14 +24,6 @@ RUN ARCH=$(dpkg --print-architecture) \
   && sudo dpkg -i "gh_${GH_VERSION_NO_V}_linux_${ARCH}.deb" || sudo apt-get install -f -y \
   && rm "gh_${GH_VERSION_NO_V}_linux_${ARCH}.deb"
 
-ENV GITHUB_TOKEN=""
-# RUN gh auth login if GITHUB_TOKEN is not empty
-RUN <<EOF
-    if [ ! -z "$GITHUB_TOKEN" ]; then
-        gh auth login --with-token
-    fi
-EOF
-
 USER root
 
 RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
