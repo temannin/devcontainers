@@ -29,21 +29,6 @@ Use the provided `dc.sh` script to interactively select and run a development en
 
 # With multiple Docker options
 ./dc.sh -v .:/workspace -p 8080:8080 --name mydevcontainer
-```
-
-This will:
-1. Display an interactive menu of available environments
-2. Allow you to select the desired environment by number
-3. Pull the pre-built image from GitHub Container Registry
-4. Start the container with SSH server on port 2222
-5. Keep the container running with an infinite loop
-
-
-### Get Container ID
-The script will display the container ID when it starts, or you can find it with:
-```bash
-docker ps
-```
 
 ## Features
 
