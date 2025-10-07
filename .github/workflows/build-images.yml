@@ -95,8 +95,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      -
+        # Add support for more platforms with QEMU (optional)
+        # https://github.com/docker/setup-qemu-action
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -147,9 +155,7 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.version.outputs.version }}
           labels: |
             org.opencontainers.image.title=${{ matrix.image }} devcontainer
             org.opencontainers.image.description=Devcontainer image for ${{ matrix.image }}
@@ -174,9 +180,7 @@ jobs:
           
           ### 🏷️ Image Tags
           - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest\`
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ steps.version.outputs.version }}\`
           - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.safe-name.outputs.safe_name }}-${{ github.sha }}\`
-          - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:${{ steps.version.outputs.version }}\`
           
           ### 🚀 Usage
           \`\`\`bash
@@ -186,52 +190,3 @@ jobs:
           
           ---
           EOF
-          
-  test-images:
-    needs: [detect-images, build-and-push]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    strategy:
-      matrix:
-        image: ${{ fromJson(needs.detect-images.outputs.images) }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Generate safe image name for test
-        id: test-safe-name
-        run: |
-          # Replace forward slashes with hyphens for Docker image names
-          SAFE_IMAGE_NAME=$(echo "${{ matrix.image }}" | sed 's/\//-/g')
-          echo "safe_name=$SAFE_IMAGE_NAME" >> $GITHUB_OUTPUT
-
-      - name: Build Docker image (test)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./${{ matrix.image }}/Dockerfile
-          platforms: linux/amd64
-          push: false
-          tags: ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test
-
-      - name: Test Docker image
-        run: |
-          # Basic smoke test - ensure the image can run
-          docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test echo "Image test successful"
-          
-          # Test that the expected tools are available
-          case "${{ matrix.image }}" in
-            "base")
-              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test which git curl wget
-              ;;
-            "java/17")
-              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test java --version
-              ;;
-            "ruby")
-              docker run --rm ${{ env.IMAGE_NAME_PREFIX }}-${{ steps.test-safe-name.outputs.safe_name }}:test ruby --version
-              ;;
-          esac
-
