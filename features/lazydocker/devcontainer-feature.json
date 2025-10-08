@@ -1,7 +1,7 @@
 {
-    "id": "temannin-lazydocker",
+    "id": "lazydocker",
     "version": "1.0.0",
-    "name": "temannin-lazydocker",
+    "name": "lazydocker",
     "documentationURL": "",
     "options": {},
     "containerEnv": {
