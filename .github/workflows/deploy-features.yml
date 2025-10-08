@@ -8,11 +8,6 @@ on:
     paths:
       - 'features/**'
 
-permissions:
-  contents: write
-  packages: write
-  pull-requests: write
-
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME_PREFIX: ${{ github.repository_owner }}/devcontainers
@@ -33,5 +28,3 @@ jobs:
         with:
           publish-features: "true"
           base-path-to-features: "./features"
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
