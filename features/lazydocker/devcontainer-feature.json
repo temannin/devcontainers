@@ -1,0 +1,24 @@
+{
+    "id": "temannin/lazydocker",
+    "version": "1.1.0",
+    "name": "temannin/lazydocker",
+    "documentationURL": "",
+    "options": {},
+    "containerEnv": {
+        "CONDA_DIR": "/usr/local/conda",
+        "PATH": "/usr/local/conda/bin:${PATH}"
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "github.copilot.chat.codeGeneration.instructions": [
+                    {
+                        "text": "This dev container includes Lazydocker for managing Docker containers."
+                    }
+                ]
+            }
+        }
+    },
+    "installsAfter": [
+    ]
+}

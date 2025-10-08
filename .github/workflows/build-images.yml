@@ -1,16 +1,20 @@
 name: Build and Push Docker Images
 
+#exclude the features directory from the workflow
+
 on:
   push:
     branches: [ main ]
     paths:
       - '**/Dockerfile'
       - '.github/workflows/build-images.yml'
+      - '!features/**'
   pull_request:
     branches: [ main ]
     paths:
       - '**/Dockerfile'
       - '.github/workflows/build-images.yml'
+      - '!features/**'
   workflow_dispatch:
 
 permissions:
@@ -34,7 +38,8 @@ jobs:
         id: detect
         run: |
           # Find all directories containing Dockerfile
-          IMAGES=$(find . -name "Dockerfile" -not -path "./.git/*" | xargs -I {} dirname {} | sed 's|^\./||' | sort)
+          # exclude features directory
+          IMAGES=$(find . -name "Dockerfile" -not -path "./.git/*" -not -path "./features/*" | xargs -I {} dirname {} | sed 's|^\./||' | sort)
 
           # remove base and lite from list
           IMAGES=$(echo "$IMAGES" | grep -v -E '^(base|lite)$')
