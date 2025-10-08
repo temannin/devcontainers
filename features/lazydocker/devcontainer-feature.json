@@ -1,12 +1,10 @@
 {
     "id": "temannin/lazydocker",
-    "version": "1.1.0",
+    "version": "0.0.1",
     "name": "temannin/lazydocker",
     "documentationURL": "",
     "options": {},
     "containerEnv": {
-        "CONDA_DIR": "/usr/local/conda",
-        "PATH": "/usr/local/conda/bin:${PATH}"
     },
     "customizations": {
         "vscode": {
