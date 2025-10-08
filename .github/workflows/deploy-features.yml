@@ -28,6 +28,7 @@ jobs:
         uses: devcontainers/action@v1
         with:
           publish-features: "true"
+          disable-repo-tagging: "true"
           base-path-to-features: "./features"
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
