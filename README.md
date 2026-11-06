@@ -8,7 +8,7 @@ A repository for setting up various development environments quickly using pre-b
 - **devcontainers-java-17**: Java 17 development environment with Maven, Gradle, and Java tooling
 - **devcontainers-java-21**: Java 21 development environment with Maven, Gradle, and Java tooling
 - **devcontainers-lite**: Minimal development environment with essential tools and non-root user setup
-- **devcontainers-larder**: Nix toolchain and the pi coding agent for the Larder repo (used by its `setup.ps1`, devcontainer and CI)
+- **devcontainers-nix-pi**: Nix and the pi coding agent, for projects that define their toolchain in a `flake.nix` (`devshell <command>` runs in the project's dev shell)
 
 ## Usage
 
