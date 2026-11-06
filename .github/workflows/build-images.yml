@@ -74,6 +74,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+        # Docker tags can't contain "/", which PR refs ("1/merge") and some branch names do.
+      - name: Safe ref name
+        id: ref
+        run: echo "name=$(echo "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" | tr '/' '-')" >> $GITHUB_OUTPUT
+
         # build lite image
       - name: Build lite image
         uses: docker/build-push-action@v5
@@ -81,11 +86,12 @@ jobs:
           context: .
           file: ./lite/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
+          # PRs only check that the image builds; they must not overwrite :latest.
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:${{ github.sha }}-${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-lite:${{ github.sha }}-${{ steps.ref.outputs.name }}
 
       - name: Build base image
         uses: docker/build-push-action@v5
@@ -93,11 +99,11 @@ jobs:
           context: .
           file: ./base/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:${{ github.sha }}-${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-base:${{ github.sha }}-${{ steps.ref.outputs.name }}
 
   build-and-push:
     needs: [detect-images, build-foundation-images]
@@ -148,6 +154,16 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ steps.safe-name.outputs.safe_name }}-{{date 'YYYYMMDD'}}-{{sha}},enable={{is_default_branch}}
 
+      - name: Read platforms
+        id: platforms
+        run: |
+          # An image folder can override the default platforms with a "platforms" file.
+          if [ -f "${{ matrix.image }}/platforms" ]; then
+            echo "value=$(tr -d '[:space:]' < "${{ matrix.image }}/platforms")" >> $GITHUB_OUTPUT
+          else
+            echo "value=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate version
         id: version
         run: |
@@ -165,7 +181,7 @@ jobs:
         with:
           context: .
           file: ./${{ matrix.image }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.platforms.outputs.value }}
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_PREFIX }}-${{ steps.safe-name.outputs.safe_name }}:latest
