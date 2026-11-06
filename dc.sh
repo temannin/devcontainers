@@ -28,7 +28,6 @@ IMAGES=(
     "devcontainers-java-17"
     "devcontainers-java-21"
     "devcontainers-lite"
-    "devcontainers-dotnet-8"
 )
 
 # Display images with numbers
