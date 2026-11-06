@@ -36,9 +36,10 @@ RUN nix develop /opt/larder-flake --profile /nix/var/nix/profiles/larder-dev --c
       /nix/var/nix/gcroots/larder-nixpkgs && \
     nix-collect-garbage
 
-# pi isn't in the public binary cache, so this compiles it (a few minutes);
-# GC in the same layer drops its build-time dependencies (~2.5 GB).
-RUN nix profile add github:earendil-works/pi/stable && nix-collect-garbage
+# pi from nixpkgs: prebuilt on cache.nixos.org, so it downloads instead of
+# compiling (the upstream github:earendil-works/pi flake has no binary cache).
+# GC drops the nixpkgs-unstable source fetched to evaluate it.
+RUN nix profile add github:NixOS/nixpkgs/nixos-unstable#pi-coding-agent && nix-collect-garbage
 
 # Load the workspace flake's dev shell into the current bash session. Cached
 # per flake.nix + flake.lock, so new shells start fast after the first one.
