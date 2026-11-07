@@ -5,7 +5,7 @@ Pre-built development container images and devcontainer features.
 ## Images
 
 - **devcontainers-nix-pi**: Nix and the pi coding agent, for projects that define their toolchain in a `flake.nix` (`devshell <command>` runs in the project's dev shell)
-- **devcontainers-packwiz**: The [packwiz](https://github.com/packwiz/packwiz) CLI for building Minecraft modpacks (compiled from source), on the Microsoft devcontainers Debian base image
+- **devcontainers-packwiz**: The [packwiz](https://github.com/packwiz/packwiz) CLI for building Minecraft modpacks (compiled from source), on the Microsoft devcontainers Debian base image. Also works as a Gitea Actions job container: includes node, python3 and the [tea](https://gitea.com/gitea/tea) CLI
 
 Use one in a `devcontainer.json`:
 
