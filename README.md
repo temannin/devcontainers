@@ -9,6 +9,7 @@ A repository for setting up various development environments quickly using pre-b
 - **devcontainers-java-21**: Java 21 development environment with Maven, Gradle, and Java tooling
 - **devcontainers-lite**: Minimal development environment with essential tools and non-root user setup
 - **devcontainers-nix-pi**: Nix and the pi coding agent, for projects that define their toolchain in a `flake.nix` (`devshell <command>` runs in the project's dev shell)
+- **devcontainers-packwiz**: Base environment plus the [packwiz](https://github.com/packwiz/packwiz) CLI for building Minecraft modpacks (compiled from source)
 
 ## Usage
 
