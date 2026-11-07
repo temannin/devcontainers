@@ -1,64 +1,30 @@
 # DevContainers
 
-A repository for setting up various development environments quickly using pre-built Docker containers with SSH access and GitHub CLI integration.
+Pre-built development container images and devcontainer features.
 
-## Available Environments
+## Images
 
-- **devcontainers-base**: Full-featured development environment with SSH server, GitHub CLI, oh-my-zsh, and enhanced tooling
-- **devcontainers-java-17**: Java 17 development environment with Maven, Gradle, and Java tooling
-- **devcontainers-java-21**: Java 21 development environment with Maven, Gradle, and Java tooling
-- **devcontainers-lite**: Minimal development environment with essential tools and non-root user setup
 - **devcontainers-nix-pi**: Nix and the pi coding agent, for projects that define their toolchain in a `flake.nix` (`devshell <command>` runs in the project's dev shell)
-- **devcontainers-packwiz**: Base environment plus the [packwiz](https://github.com/packwiz/packwiz) CLI for building Minecraft modpacks (compiled from source)
+- **devcontainers-packwiz**: The [packwiz](https://github.com/packwiz/packwiz) CLI for building Minecraft modpacks (compiled from source), on the Microsoft devcontainers Debian base image
 
-## Usage
+Use one in a `devcontainer.json`:
 
-Use the provided `dc.sh` script to interactively select and run a development environment:
-
-```bash
-./dc.sh [docker_run_args...]
+```json
+{
+  "image": "ghcr.io/temannin/devcontainers-packwiz:latest"
+}
 ```
 
-### Examples
+or run it directly:
 
 ```bash
-# Basic usage - shows interactive menu to select environment
-./dc.sh
-
-# With volume mount
-./dc.sh -v .:/workspace
-
-# With multiple Docker options
-./dc.sh -v .:/workspace -p 8080:8080 --name mydevcontainer
+docker run -it --rm -v .:/workspace ghcr.io/temannin/devcontainers-packwiz:latest
+```
 
 ## Features
 
-### All Environments Include
-- Ubuntu latest base image
-- Non-root user (`vscode`) with sudo access
-- Essential development tools (git, vim, build-essential, curl, wget, etc.)
-- Network utilities (ping, net-tools, dnsutils)
-- Process management tools (htop, procps)
-- Text processing tools (jq)
-- SSH server with password authentication
-
-### Specialized Environments
-- **Java 17/21**: Maven, Gradle, OpenJDK, and Java development tools
-- **.NET 8**: .NET SDK, NuGet, and .NET development tools
-- **Base**: Enhanced with oh-my-zsh and additional development tools
-
-## Environment Variables
-
-- `DOCKER_IN_DOCKER=true`: Mounts Docker socket for Docker-in-Docker integration
-
-## Requirements
-
-- Docker
-- GitHub CLI (optional)
-- SSH client (optional, for SSH connections)
+- **lazydocker**: installs [lazydocker](https://github.com/jesseduffield/lazydocker) (`features/lazydocker`)
 
 ## Container Registry
 
-All images are automatically built and published to GitHub Container Registry:
-- Registry: `ghcr.io/temannin/`
-- Images are built via GitHub Actions on push to main branch
+Images and features are published to GitHub Container Registry (`ghcr.io/temannin/`) by GitHub Actions on push to `main`. Each folder with a `Dockerfile` is built as `devcontainers-<folder>`; pull requests only check that the images build.
