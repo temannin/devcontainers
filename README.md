@@ -45,9 +45,10 @@ script warns when it doesn't.)
 Through WSL it uses the distro's Docker (Docker Desktop with WSL integration, or
 Docker Engine installed in the distro) or Podman to:
 
-- build a local image (nothing is published): an Eclipse Temurin JDK, with the
-  version read from `.java-version`, `.sdkmanrc`, `.tool-versions`, `pom.xml` or
-  `build.gradle(.kts)` (default 17, or `-JavaVersion`), plus Maven and sshd;
+- build a local image (nothing is published) on the official Maven image,
+  `maven:3-eclipse-temurin-<N>`, with the JDK version read from `.java-version`,
+  `.sdkmanrc`, `.tool-versions`, `pom.xml` or `build.gradle(.kts)` (default 17,
+  or `-JavaVersion`), plus sshd;
 - start a container with SSH on `127.0.0.1:2222` (or the next free port), letting
   in `~\.ssh\id_ed25519.pub` (or `-PublicKey`), which it creates if you have no
   SSH key yet. With Docker Engine or Podman in the distro, the container shares
