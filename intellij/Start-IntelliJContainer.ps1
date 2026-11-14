@@ -115,6 +115,17 @@ RUN apt-get update \
       fontconfig libfreetype6 libxext6 libxrender1 libxtst6 libxi6 \
  && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
 
+# The GitHub CLI, from GitHub's apt repository. The script logs it in with
+# your Windows gh's token, and Git uses it for https://github.com credentials.
+RUN install -d -m 755 /etc/apt/keyrings \
+ && curl -fsSL -o /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+ && chmod 644 /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends gh \
+ && rm -rf /var/lib/apt/lists/*
+
 # Maven, for projects without a wrapper (./mvnw) and for the terminal. Ubuntu's
 # package would pull in a second JDK, so it comes from Maven Central (which
 # keeps every release), checked against the SHA-512 published there.
@@ -334,6 +345,35 @@ case "$port" in
 esac
 '@
     if ("$output" -match '(\d+)\s*$') { return [int]$Matches[1] }
+}
+
+# Gives the container your GitHub login: the token of the gh CLI on Windows
+# goes to the container's gh, which Git then uses for https://github.com. Run
+# on every start, so a new login on Windows carries over. Containers whose image
+# predates gh get the token in Git's credential store instead.
+function Set-GitHubAuth {
+    $gh = Get-Command gh.exe -ErrorAction SilentlyContinue
+    if (-not $gh) { return }
+    # (Windows PowerShell turns gh's error output into a terminating error.)
+    try { $token = "$(& $gh.Source auth token --hostname github.com 2>$null)".Trim() } catch { $token = '' }
+    if (-not $token) {
+        Write-Host "GitHub: your Windows gh isn't logged in, so the container can't clone private repos. Run 'gh auth login', then this script again."
+        return
+    }
+    $null = Invoke-Wsl -Variables @{ name = $ContainerName; token = $token } @'
+if $E exec -u dev "$name" sh -c 'command -v gh' >/dev/null 2>&1; then
+  printf '%s\n' "$token" | $E exec -i -u dev "$name" gh auth login --hostname github.com --git-protocol https --with-token
+  $E exec -u dev "$name" gh auth setup-git --hostname github.com
+else
+  printf 'https://x-access-token:%s@github.com\n' "$token" \
+    | $E exec -i -u dev "$name" sh -c 'umask 077 && cat > "$HOME/.git-credentials" && git config --global credential.https://github.com.helper store'
+fi
+'@
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'GitHub: the container uses your gh login for https://github.com.'
+    } else {
+        Write-Warning "Couldn't pass your GitHub login to the container; run 'gh auth login' inside it instead."
+    }
 }
 
 # Waits for sshd's greeting on 127.0.0.1:<port>, so a container that's up but
@@ -633,6 +673,7 @@ done
         $hostPort = Get-ContainerPort
         $UseHostNetwork = "$(Invoke-Wsl -Variables @{ name = $ContainerName } '$E inspect -f "{{.HostConfig.NetworkMode}}" "$name"')".Trim() -eq 'host'
         Assert-SshAnswers $hostPort
+        Set-GitHubAuth
         Write-ConnectionInfo $hostPort $null
         return
     }
@@ -828,6 +869,7 @@ $E exec -u dev -w "$dir" "$name" sh -c 'for f in mvnw gradlew; do [ ! -f "$f" ] 
     }
 
     Assert-SshAnswers $Port
+    Set-GitHubAuth
     Write-ConnectionInfo $Port $privateKeyPath
 } finally {
     try { [Console]::OutputEncoding = $previousOutputEncoding } catch { }
