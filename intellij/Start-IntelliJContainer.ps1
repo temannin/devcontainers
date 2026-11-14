@@ -172,6 +172,11 @@ chmod 644 /etc/ssh/intellij_authorized_keys
 # Where /etc/profile.d/zz-intellij-project.sh takes SSH logins.
 printf '%s\n' "$PROJECT_DIR" > /etc/intellij-project
 mkdir -p /run/sshd
+# On the host network (SSH_PORT set) sshd listens on 127.0.0.1:<port>, which
+# WSL forwards to Windows; otherwise on port 22, published by the engine.
+if [ -n "$SSH_PORT" ]; then
+  exec /usr/sbin/sshd -D -e -p "$SSH_PORT" -o ListenAddress=127.0.0.1
+fi
 exec /usr/sbin/sshd -D -e
 '@
 
@@ -319,8 +324,42 @@ function New-SshKey {
 }
 
 function Get-ContainerPort {
-    $output = Invoke-Wsl -Variables @{ name = $ContainerName } '$E port "$name" 22 2>/dev/null | head -n1 || true'
-    if ("$output" -match ':(\d+)\s*$') { return [int]$Matches[1] }
+    # Containers record their SSH port in a label; on the host network there's
+    # no published port to ask the engine about.
+    $output = Invoke-Wsl -Variables @{ name = $ContainerName } @'
+port=$($E inspect -f '{{index .Config.Labels "intellij.port"}}' "$name" 2>/dev/null || true)
+case "$port" in
+  ''|*[!0-9]*) $E port "$name" 22 2>/dev/null | head -n1 || true ;;
+  *) echo "$port" ;;
+esac
+'@
+    if ("$output" -match '(\d+)\s*$') { return [int]$Matches[1] }
+}
+
+# Waits for sshd's greeting on 127.0.0.1:<port>, so a container that's up but
+# unreachable is reported instead of looking ready.
+function Assert-SshAnswers([int]$HostPort) {
+    $deadline = (Get-Date).AddSeconds(15)
+    $lastError = $null
+    while ((Get-Date) -lt $deadline) {
+        $client = New-Object System.Net.Sockets.TcpClient
+        try {
+            $client.Connect('127.0.0.1', $HostPort)
+            $stream = $client.GetStream()
+            $stream.ReadTimeout = 3000
+            $buffer = New-Object byte[] 4
+            if ($stream.Read($buffer, 0, 4) -eq 4 -and [Text.Encoding]::ASCII.GetString($buffer) -eq 'SSH-') { return }
+            $lastError = 'the connection was closed before the SSH greeting'
+        } catch {
+            $lastError = $_.Exception.InnerException.Message
+            if (-not $lastError) { $lastError = $_.Exception.Message }
+        } finally {
+            $client.Close()
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    Stop-WithError ("$ContainerName is running, but SSH isn't answering on 127.0.0.1:${HostPort} ($lastError).`n" +
+        "  Its log:  wsl -d $DistroName -e $EngineCommand logs $ContainerName")
 }
 
 # WSL shuts a distro down a few seconds after its last wsl.exe session ends,
@@ -364,6 +403,11 @@ function Write-ConnectionInfo([int]$HostPort, [string]$KeyPath) {
     Write-Host "Shell:  ssh -p $HostPort dev@127.0.0.1"
     Write-Host "Stop:   $command -Stop"
     Write-Host "Delete: $command -Remove"
+    if ($UseHostNetwork) {
+        Write-Host ''
+        Write-Host 'The container shares WSL''s network: a server it runs on, say, port 8080 is at'
+        Write-Host 'http://localhost:8080 on Windows (two projects can''t use the same port at once).'
+    }
     if ($NeedsKeepAlive) {
         Write-Host ''
         Write-Host "A hidden wsl.exe keeps $DistroName (and so the container) running until -Stop."
@@ -586,7 +630,10 @@ done
             }
         }
         Write-Host "Using the existing container; files weren't copied again (-Remove starts over)."
-        Write-ConnectionInfo (Get-ContainerPort) $null
+        $hostPort = Get-ContainerPort
+        $UseHostNetwork = "$(Invoke-Wsl -Variables @{ name = $ContainerName } '$E inspect -f "{{.HostConfig.NetworkMode}}" "$name"')".Trim() -eq 'host'
+        Assert-SshAnswers $hostPort
+        Write-ConnectionInfo $hostPort $null
         return
     }
 
@@ -621,10 +668,12 @@ done
         foreach ($listener in [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) {
             $used[$listener.Port] = $true
         }
-        # Stopped containers don't hold their ports, but will when started.
+        # Stopped containers don't hold their ports, but will when started. And
+        # on the host network, sshd competes with everything listening in WSL.
         $taken = Invoke-Wsl @'
 ids=$($E ps -aq --filter label=intellij.project)
-[ -z "$ids" ] || $E inspect -f '{{range .HostConfig.PortBindings}}{{range .}}{{.HostPort}} {{end}}{{end}}' $ids
+[ -z "$ids" ] || $E inspect -f '{{index .Config.Labels "intellij.port"}} {{range .HostConfig.PortBindings}}{{range .}}{{.HostPort}} {{end}}{{end}}' $ids
+! command -v ss >/dev/null 2>&1 || ss -Hltn | awk '{ n = split($4, a, ":"); print a[n] }'
 '@
         foreach ($p in ("$taken" -split '\s+')) { if ($p -match '^\d+$') { $used[[int]$p] = $true } }
         $Port = 2222
@@ -671,17 +720,32 @@ $E build -q --build-arg "BASE=$base" -t "$image" "$dir"
         Stop-WithError "Building $image failed (is there a Temurin $($java.Version) image? Pick another with -JavaVersion)."
     }
 
+    # With the engine inside WSL, the container joins WSL's own network. Then
+    # sshd and any server the project runs are reachable from Windows through
+    # WSL's localhost forwarding, and nothing depends on the engine's bridge,
+    # which another engine in a different distro (they all share one network)
+    # can clash with. Docker Desktop runs in its own VM, so it keeps the bridge
+    # and publishes SSH.
+    $UseHostNetwork = $NeedsKeepAlive
     Write-Host "Starting $ContainerName on 127.0.0.1:$Port..."
     $null = Invoke-Wsl -Variables @{
         name = $ContainerName; hostname = $slug; image = $image; port = $Port
         project = $ProjectPath; key = $publicKeyText; project_dir = $ProjectDir
+        host_network = $(if ($UseHostNetwork) { 'yes' } else { '' })
     } @'
+if [ -n "$host_network" ]; then
+  # The host network brings no /etc/hosts entry for the container's own
+  # hostname, and servers (jwebserver, Spring Boot) look it up.
+  network=(--network host --add-host "$hostname:127.0.0.1" -e "SSH_PORT=$port")
+else
+  network=(-p "127.0.0.1:$port:22")
+fi
 $E volume create "$name" >/dev/null
 # AUDIT_WRITE: Docker grants it by default, Podman doesn't, and sshd's PAM
 # session needs it.
 $E run -d --name "$name" --hostname "$hostname" \
-  --label "intellij.project=$project" \
-  -p "127.0.0.1:$port:22" --cap-add AUDIT_WRITE \
+  --label "intellij.project=$project" --label "intellij.port=$port" \
+  "${network[@]}" --cap-add AUDIT_WRITE \
   -e "SSH_PUBLIC_KEY=$key" -e "PROJECT_DIR=$project_dir" \
   -v "$name:/workspace" \
   "$image" >/dev/null
