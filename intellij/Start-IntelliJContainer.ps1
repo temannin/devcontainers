@@ -4,7 +4,7 @@ Runs a Java project in a container that IntelliJ connects to over SSH.
 
 .DESCRIPTION
 Run it from a Java project on Windows. Through WSL it builds a small local
-image (an Eclipse Temurin JDK, Maven and an SSH server), starts a container from it
+image (the official Maven image for the JDK, plus an SSH server), starts a container from it
 and copies the project into a volume that belongs to that container. IntelliJ
 (File > Remote Development > SSH, or JetBrains Gateway) then connects to it as
 "dev" and runs the IDE backend inside.
@@ -115,17 +115,10 @@ RUN apt-get update \
       fontconfig libfreetype6 libxext6 libxrender1 libxtst6 libxi6 \
  && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
 
-# Maven, for projects without a wrapper (./mvnw) and for the terminal. Ubuntu's
-# package would pull in a second JDK, so it comes from Maven Central (which
-# keeps every release), checked against the SHA-512 published there.
-ARG MAVEN_VERSION=3.9.16
-RUN url=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.tar.gz \
- && curl -fsSL -o /tmp/maven.tar.gz "$url" \
- && echo "$(curl -fsSL "$url.sha512" | cut -d' ' -f1)  /tmp/maven.tar.gz" | sha512sum -c - \
- && mkdir -p /opt/maven \
- && tar -xzf /tmp/maven.tar.gz -C /opt/maven --strip-components=1 \
- && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn \
- && rm /tmp/maven.tar.gz
+# The base (maven:3-eclipse-temurin-<N>) brings the JDK and Maven. It points
+# MAVEN_CONFIG at /root/.m2, which is the wrong home for dev and which ./mvnw
+# passes to Maven as an argument ('Unknown lifecycle phase "/root/.m2"').
+ENV MAVEN_CONFIG=
 
 RUN useradd --create-home --shell /bin/bash dev \
  && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev \
@@ -134,7 +127,7 @@ RUN useradd --create-home --shell /bin/bash dev \
 
 # SSH sessions don't inherit the image's ENV, so java wouldn't be on the PATH.
 # PAM loads /etc/environment into every session.
-RUN env | grep -E '^(JAVA_HOME|PATH|LANG|LANGUAGE|LC_ALL)=' \
+RUN env | grep -E '^(JAVA_HOME|MAVEN_HOME|PATH|LANG|LANGUAGE|LC_ALL)=' \
       | sed 's/^\([^=]*\)=\(.*\)$/\1="\2"/' > /etc/environment
 
 COPY sshd.conf /etc/ssh/sshd_config.d/intellij.conf
@@ -684,7 +677,8 @@ done
         $java = Get-JavaVersion $ProjectPath
     }
     $image = "intellij-dev:jdk$($java.Version)"
-    $baseImage = "docker.io/library/eclipse-temurin:$($java.Version)-jdk"
+    # The official Maven image: Eclipse Temurin with Maven 3 on top.
+    $baseImage = "docker.io/library/maven:3-eclipse-temurin-$($java.Version)"
 
     # Port
     if (-not $Port) {
@@ -740,7 +734,7 @@ $E build -q --build-arg "BASE=$base" -t "$image" "$dir"
 '@
     if ($LASTEXITCODE -ne 0) {
         Stop-KeepAlive
-        Stop-WithError "Building $image failed (is there a Temurin $($java.Version) image? Pick another with -JavaVersion)."
+        Stop-WithError "Building $image failed (is there a maven:3-eclipse-temurin-$($java.Version) image? Pick another JDK with -JavaVersion)."
     }
 
     # With the engine inside WSL, the container joins WSL's own network. Then
