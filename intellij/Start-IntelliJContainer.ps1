@@ -50,6 +50,12 @@ The WSL distro to use. Defaults to WSL's default distro.
 .PARAMETER Engine
 docker or podman. By default docker is used if it works, otherwise podman.
 
+.PARAMETER Fresh
+Start over: delete the project's container and its volume (asking first, since
+work in it that hasn't been pushed is lost), then create it again from a fresh
+copy of the project, with the newest base image. It keeps its port, so saved
+connections still work.
+
 .PARAMETER Stop
 Stop the project's container.
 
@@ -77,6 +83,9 @@ param(
 
     [Parameter(ParameterSetName = 'Start')]
     [string]$PublicKey,
+
+    [Parameter(ParameterSetName = 'Start')]
+    [switch]$Fresh,
 
     [string]$Distro,
 
@@ -618,20 +627,31 @@ done
         return
     }
 
-    if ($Remove) {
+    # -Fresh is -Remove followed by a normal start that creates the container.
+    if ($Remove -or $Fresh) {
         $volumeExists = Invoke-Wsl -Variables @{ name = $ContainerName } '$E volume inspect "$name" >/dev/null 2>&1 && echo yes || true'
-        if (-not $state -and "$volumeExists".Trim() -ne 'yes') { Write-Host "There's no container for $ProjectPath."; return }
-        if (-not $PSCmdlet.ShouldProcess("$ContainerName and its copy of the project", 'Delete')) { return }
-        $hostPort = if ($state) { Get-ContainerPort }
-        $null = Invoke-Wsl -Variables @{ name = $ContainerName } '$E rm -f "$name" >/dev/null 2>&1 || true; $E volume rm -f "$name" >/dev/null 2>&1 || true'
-        Stop-KeepAlive
-        # The next container on this port has new host keys; forget the old ones.
-        $sshKeygen = Get-Command ssh-keygen.exe -ErrorAction SilentlyContinue
-        if ($hostPort -and $sshKeygen -and (Test-Path -LiteralPath (Join-Path $HOME '.ssh\known_hosts'))) {
-            $null = & $sshKeygen.Source -R "[127.0.0.1]:$hostPort" 2>&1
+        $exists = $state -or ("$volumeExists".Trim() -eq 'yes')
+        if ($Remove -and -not $exists) { Write-Host "There's no container for $ProjectPath."; return }
+        if ($exists) {
+            $action = if ($Fresh) { 'Delete, then create again from a fresh copy of the project' } else { 'Delete' }
+            if (-not $PSCmdlet.ShouldProcess("$ContainerName and its copy of the project, with any work in it that isn't pushed", $action)) { return }
+            $hostPort = if ($state) { Get-ContainerPort }
+            $null = Invoke-Wsl -Variables @{ name = $ContainerName } '$E rm -f "$name" >/dev/null 2>&1 || true; $E volume rm -f "$name" >/dev/null 2>&1 || true'
+            # The next container on this port has new host keys; forget the old ones.
+            $sshKeygen = Get-Command ssh-keygen.exe -ErrorAction SilentlyContinue
+            if ($hostPort -and $sshKeygen -and (Test-Path -LiteralPath (Join-Path $HOME '.ssh\known_hosts'))) {
+                $null = & $sshKeygen.Source -R "[127.0.0.1]:$hostPort" 2>&1
+            }
+            if ($Remove) {
+                Stop-KeepAlive
+                Write-Host "Deleted $ContainerName."
+                return
+            }
+            Write-Host "Deleted $ContainerName; creating it again."
+            # Same port as before, so saved connections keep working.
+            if (-not $Port -and $hostPort) { $Port = $hostPort }
+            $state = ''
         }
-        Write-Host "Deleted $ContainerName."
-        return
     }
 
     # --- Start an existing container ------------------------------------------
@@ -723,6 +743,7 @@ ids=$($E ps -aq --filter label=intellij.project)
     $null = Invoke-Wsl -Variables @{
         dockerfile = $Dockerfile; sshd_config = $SshdConfig; entrypoint = $Entrypoint; project_profile = $ProjectProfile
         image = $image; base = $baseImage
+        pull = $(if ($Fresh) { 'yes' } else { '' })
     } @'
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
@@ -730,7 +751,8 @@ printf '%s\n' "$dockerfile" > "$dir/Dockerfile"
 printf '%s\n' "$sshd_config" > "$dir/sshd.conf"
 printf '%s\n' "$entrypoint" > "$dir/entrypoint.sh"
 printf '%s\n' "$project_profile" > "$dir/project.sh"
-$E build -q --build-arg "BASE=$base" -t "$image" "$dir"
+# -Fresh: fetch the newest base image instead of reusing the one cached.
+$E build -q ${pull:+--pull} --build-arg "BASE=$base" -t "$image" "$dir"
 '@
     if ($LASTEXITCODE -ne 0) {
         Stop-KeepAlive
@@ -793,9 +815,12 @@ $E run -d --name "$name" --hostname "$hostname" \
 src=$(wslpath -a "$winpath")
 list=$(wslpath -a "$winlist")
 $E exec -u dev "$name" mkdir -p "$dir"
+# -m: the copies get the current time. Files from a zip (Spring Initializr's,
+# say) can carry times hours in the future, which makes tar warn about every
+# file and Maven recompile on every build until that time passes.
 { printf '.git\0'; cat "$list"; } \
   | tar -C "$src" --null -T - -cf - \
-  | $E exec -i -u dev "$name" tar -C "$dir" -xf -
+  | $E exec -i -u dev "$name" tar -C "$dir" -xmf -
 $E exec -i -u dev -w "$dir" "$name" bash -s -- "$stash" <<'EOS'
 set -e
 # Settings Git for Windows writes into the repository that are wrong on Linux.
@@ -815,8 +840,9 @@ EOS
             $null = Invoke-Wsl -Variables $copyVariables @'
 src=$(wslpath -a "$winpath")
 $E exec -u dev "$name" mkdir -p "$dir"
+# -m: the copies get the current time (see the Git case above).
 tar -C "$src" --anchored --exclude=./target --exclude=./build --exclude=./out --exclude=./.gradle -cf - . \
-  | $E exec -i -u dev "$name" tar -C "$dir" -xf -
+  | $E exec -i -u dev "$name" tar -C "$dir" -xmf -
 # Wrapper scripts with Windows line endings won't run.
 $E exec -u dev -w "$dir" "$name" sh -c 'for f in mvnw gradlew; do [ ! -f "$f" ] || { sed -i "s/\r\$//" "$f"; chmod +x "$f"; }; done'
 '@

@@ -62,7 +62,9 @@ Docker Engine installed in the distro) or Podman to:
 It then prints the details for IntelliJ's **File > Remote Development > SSH**
 (or JetBrains Gateway): user `dev`, host `127.0.0.1`, the port, and the project
 directory. Running it again starts the existing container without copying
-again; `-Stop` stops it and `-Remove` deletes it with its copy of the project.
+again; `-Stop` stops it, `-Remove` deletes it with its copy of the project, and
+`-Fresh` deletes it and creates it again from a fresh copy, on the newest base
+image and the same port.
 Missing prerequisites (WSL, a distro, a container engine, an SSH key) are
 reported with how to fix them; `Get-Help ~\.devcontainers\Start-IntelliJContainer.ps1 -Full`
 lists every option.
