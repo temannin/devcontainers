@@ -1,0 +1,58 @@
+name: PowerShell Tests
+
+# The DevContainers module's Pester tests. They mock WSL, the container engines
+# and the network, so they run on a plain Windows runner.
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'powershell/**'
+      - '.github/workflows/powershell-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pester:
+    name: Pester (${{ matrix.shell }})
+    runs-on: windows-latest
+    strategy:
+      # The module supports both editions; a failure in one shouldn't hide the other.
+      fail-fast: false
+      matrix:
+        shell: [ pwsh, powershell ]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Windows PowerShell only comes with Pester 3.4, and the tests need 5.
+      # (-SkipPublisherCheck: 3.4 is signed differently, and Install-Module
+      # refuses to replace it otherwise.)
+      - name: Install Pester
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run tests
+        run: |
+          Import-Module Pester -RequiredVersion 5.7.1
+          $PSVersionTable.PSVersion
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'powershell/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'pester-results.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results-${{ matrix.shell }}
+          path: pester-results.xml
