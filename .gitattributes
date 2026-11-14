@@ -1,0 +1,2 @@
+# Copied into Linux images: a Windows checkout must not give them CRLF.
+powershell/DevContainers/image/* text eol=lf
