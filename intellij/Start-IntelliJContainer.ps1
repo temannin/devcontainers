@@ -4,7 +4,7 @@ Runs a Java project in a container that IntelliJ connects to over SSH.
 
 .DESCRIPTION
 Run it from a Java project on Windows. Through WSL it builds a small local
-image (an Eclipse Temurin JDK plus an SSH server), starts a container from it
+image (an Eclipse Temurin JDK, Maven and an SSH server), starts a container from it
 and copies the project into a volume that belongs to that container. IntelliJ
 (File > Remote Development > SSH, or JetBrains Gateway) then connects to it as
 "dev" and runs the IDE backend inside.
@@ -114,6 +114,18 @@ RUN apt-get update \
       openssh-server sudo tini git curl ca-certificates unzip zip less procps \
       fontconfig libfreetype6 libxext6 libxrender1 libxtst6 libxi6 \
  && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
+
+# Maven, for projects without a wrapper (./mvnw) and for the terminal. Ubuntu's
+# package would pull in a second JDK, so it comes from Maven Central (which
+# keeps every release), checked against the SHA-512 published there.
+ARG MAVEN_VERSION=3.9.16
+RUN url=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.tar.gz \
+ && curl -fsSL -o /tmp/maven.tar.gz "$url" \
+ && echo "$(curl -fsSL "$url.sha512" | cut -d' ' -f1)  /tmp/maven.tar.gz" | sha512sum -c - \
+ && mkdir -p /opt/maven \
+ && tar -xzf /tmp/maven.tar.gz -C /opt/maven --strip-components=1 \
+ && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn \
+ && rm /tmp/maven.tar.gz
 
 RUN useradd --create-home --shell /bin/bash dev \
  && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev \
