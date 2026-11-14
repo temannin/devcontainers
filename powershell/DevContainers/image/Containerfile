@@ -1,0 +1,45 @@
+# The image Start-DevContainer builds locally (never pushed) as
+# intellij-dev:jdk<version>. BASE is maven:3-eclipse-temurin-<version>.
+# (Named Containerfile so the repo's workflow, which builds every Dockerfile,
+# leaves it alone.)
+ARG BASE
+FROM ${BASE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# openssh-server: what the IDE connects to.
+# tini: PID 1, so processes the IDE leaves behind (Gradle/Maven daemons, test
+#   runs) are reaped.
+# fontconfig, libfreetype6, libx*: the IDE backend runs headless but still
+#   loads AWT, which needs them.
+# The host keys the package generates are deleted: each container makes its own
+# on first start.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      openssh-server sudo tini git curl ca-certificates unzip zip less procps \
+      fontconfig libfreetype6 libxext6 libxrender1 libxtst6 libxi6 \
+ && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
+
+# The base (maven:3-eclipse-temurin-<N>) brings the JDK and Maven. It points
+# MAVEN_CONFIG at /root/.m2, which is the wrong home for dev and which ./mvnw
+# passes to Maven as an argument ('Unknown lifecycle phase "/root/.m2"').
+ENV MAVEN_CONFIG=
+
+RUN useradd --create-home --shell /bin/bash dev \
+ && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev \
+ && chmod 440 /etc/sudoers.d/dev \
+ && install -d -o dev -g dev /workspace
+
+# SSH sessions don't inherit the image's ENV, so java wouldn't be on the PATH.
+# PAM loads /etc/environment into every session.
+RUN env | grep -E '^(JAVA_HOME|MAVEN_HOME|PATH|LANG|LANGUAGE|LC_ALL)=' \
+      | sed 's/^\([^=]*\)=\(.*\)$/\1="\2"/' > /etc/environment
+
+COPY sshd.conf /etc/ssh/sshd_config.d/intellij.conf
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 755 /usr/local/bin/entrypoint.sh
+COPY project.sh /etc/profile.d/zz-intellij-project.sh
+
+WORKDIR /workspace
+EXPOSE 22
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
