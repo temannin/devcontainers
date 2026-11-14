@@ -77,6 +77,14 @@ again. Missing prerequisites (WSL, a distro, a container engine, the internet,
 an SSH key) are reported with how to fix them; `Get-Help Start-DevContainer -Full`
 lists every option.
 
+The module's tests mock WSL, the engines and the network, so they don't touch
+any containers. They need Pester 5 (`Install-Module Pester -Scope CurrentUser`),
+in PowerShell 7:
+
+```powershell
+PS C:\path\to\devcontainers> Invoke-Pester .\powershell\tests -Output Detailed
+```
+
 ## Features
 
 - **lazydocker**: installs [lazydocker](https://github.com/jesseduffield/lazydocker) (`features/lazydocker`)

@@ -665,6 +665,10 @@ function Write-ConnectionInfo($Context, $Project, [int]$HostPort, [string]$KeyPa
     }
 }
 
+function Get-WindowsListenerPort {
+    [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | ForEach-Object { $_.Port }
+}
+
 # The first free port from 2222, warning when that isn't 2222 itself.
 function Select-Port($Context) {
     # What holds each port, for the warning. Later entries are more telling and
@@ -673,9 +677,7 @@ function Select-Port($Context) {
     # containers. Stopped containers don't hold their ports, but will when
     # started.
     $used = @{}
-    foreach ($listener in [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()) {
-        $used[$listener.Port] = 'a program on Windows'
-    }
+    foreach ($p in @(Get-WindowsListenerPort)) { $used[[int]$p] = 'a program on Windows' }
     $listening = Invoke-Wsl $Context '! command -v ss >/dev/null 2>&1 || ss -Hltn | awk ''{ n = split($4, a, ":"); print a[n] }'''
     foreach ($p in @($listening)) {
         if ("$p" -match '^\d+$') { $used[[int]$p] = 'something in WSL (another container engine''s dev container, say)' }
