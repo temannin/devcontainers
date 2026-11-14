@@ -140,6 +140,7 @@ RUN env | grep -E '^(JAVA_HOME|PATH|LANG|LANGUAGE|LC_ALL)=' \
 COPY sshd.conf /etc/ssh/sshd_config.d/intellij.conf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 755 /usr/local/bin/entrypoint.sh
+COPY project.sh /etc/profile.d/zz-intellij-project.sh
 
 WORKDIR /workspace
 EXPOSE 22
@@ -168,8 +169,25 @@ set -e
 ssh-keygen -A
 printf '%s\n' "$SSH_PUBLIC_KEY" > /etc/ssh/intellij_authorized_keys
 chmod 644 /etc/ssh/intellij_authorized_keys
+# Where /etc/profile.d/zz-intellij-project.sh takes SSH logins.
+printf '%s\n' "$PROJECT_DIR" > /etc/intellij-project
 mkdir -p /run/sshd
 exec /usr/sbin/sshd -D -e
+'@
+
+# Interactive SSH logins start in the project rather than the home directory.
+# Commands run over SSH (ssh host command, IntelliJ's own connections) don't
+# start login shells, so they keep their working directory.
+$ProjectProfile = @'
+case $- in
+  *i*)
+    if [ -n "$SSH_CONNECTION" ] && [ "$PWD" = "$HOME" ] && [ -r /etc/intellij-project ]; then
+      __project=$(cat /etc/intellij-project)
+      [ -n "$__project" ] && [ -d "$__project" ] && cd "$__project"
+      unset __project
+    fi
+    ;;
+esac
 '@
 
 # ---------------------------------------------------------------------------
@@ -637,7 +655,7 @@ ids=$($E ps -aq --filter label=intellij.project)
     Start-KeepAlive
     Write-Host "Building $image (the first build takes a minute or two)..."
     $null = Invoke-Wsl -Variables @{
-        dockerfile = $Dockerfile; sshd_config = $SshdConfig; entrypoint = $Entrypoint
+        dockerfile = $Dockerfile; sshd_config = $SshdConfig; entrypoint = $Entrypoint; project_profile = $ProjectProfile
         image = $image; base = $baseImage
     } @'
 dir=$(mktemp -d)
@@ -645,6 +663,7 @@ trap 'rm -rf "$dir"' EXIT
 printf '%s\n' "$dockerfile" > "$dir/Dockerfile"
 printf '%s\n' "$sshd_config" > "$dir/sshd.conf"
 printf '%s\n' "$entrypoint" > "$dir/entrypoint.sh"
+printf '%s\n' "$project_profile" > "$dir/project.sh"
 $E build -q --build-arg "BASE=$base" -t "$image" "$dir"
 '@
     if ($LASTEXITCODE -ne 0) {
@@ -655,7 +674,7 @@ $E build -q --build-arg "BASE=$base" -t "$image" "$dir"
     Write-Host "Starting $ContainerName on 127.0.0.1:$Port..."
     $null = Invoke-Wsl -Variables @{
         name = $ContainerName; hostname = $slug; image = $image; port = $Port
-        project = $ProjectPath; key = $publicKeyText
+        project = $ProjectPath; key = $publicKeyText; project_dir = $ProjectDir
     } @'
 $E volume create "$name" >/dev/null
 # AUDIT_WRITE: Docker grants it by default, Podman doesn't, and sshd's PAM
@@ -663,7 +682,7 @@ $E volume create "$name" >/dev/null
 $E run -d --name "$name" --hostname "$hostname" \
   --label "intellij.project=$project" \
   -p "127.0.0.1:$port:22" --cap-add AUDIT_WRITE \
-  -e "SSH_PUBLIC_KEY=$key" \
+  -e "SSH_PUBLIC_KEY=$key" -e "PROJECT_DIR=$project_dir" \
   -v "$name:/workspace" \
   "$image" >/dev/null
 '@
