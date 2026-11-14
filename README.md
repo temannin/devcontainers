@@ -50,7 +50,9 @@ Docker Engine installed in the distro) or Podman to:
   `build.gradle(.kts)` (default 17, or `-JavaVersion`), plus Maven and sshd;
 - start a container with SSH on `127.0.0.1:2222` (or the next free port), letting
   in `~\.ssh\id_ed25519.pub` (or `-PublicKey`), which it creates if you have no
-  SSH key yet;
+  SSH key yet. With Docker Engine or Podman in the distro, the container shares
+  WSL's network, so a server it runs (say Spring Boot on 8080) is at
+  `http://localhost:8080` on Windows;
 - copy the project into a volume at `/workspace/<folder>`. For a Git repository
   the container checks the tracked files out itself, so they get Linux line
   endings, and reapplies uncommitted changes; ignored files such as `target/`
