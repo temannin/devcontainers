@@ -681,14 +681,13 @@ ids=$($E ps -aq --filter label=intellij.project)
     }
 
     # What to copy
-    $GitPath = $null
+    $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
+    $GitPath = if ($gitCommand) { $gitCommand.Source } else { $null }
     $gitMode = $false
     if (Test-Path -LiteralPath (Join-Path $ProjectPath '.git') -PathType Container) {
-        $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
-        if (-not $gitCommand) {
+        if (-not $GitPath) {
             Write-Warning "Git for Windows isn't on the PATH; copying the folder as it is instead of through Git."
         } else {
-            $GitPath = $gitCommand.Source
             if ((Invoke-Git 'rev-parse', '--verify', '-q', 'HEAD').ExitCode -eq 0) {
                 $gitMode = $true
             } else {
@@ -772,8 +771,6 @@ $E run -d --name "$name" --hostname "$hostname" \
 
             $copyVariables.winlist = $listFile
             $copyVariables.stash = $stash.Output
-            $copyVariables.git_name = (Invoke-Git 'config', 'user.name').Output
-            $copyVariables.git_email = (Invoke-Git 'config', 'user.email').Output
             $null = Invoke-Wsl -Variables $copyVariables @'
 src=$(wslpath -a "$winpath")
 list=$(wslpath -a "$winlist")
@@ -781,7 +778,7 @@ $E exec -u dev "$name" mkdir -p "$dir"
 { printf '.git\0'; cat "$list"; } \
   | tar -C "$src" --null -T - -cf - \
   | $E exec -i -u dev "$name" tar -C "$dir" -xf -
-$E exec -i -u dev -w "$dir" "$name" bash -s -- "$stash" "$git_name" "$git_email" <<'EOS'
+$E exec -i -u dev -w "$dir" "$name" bash -s -- "$stash" <<'EOS'
 set -e
 # Settings Git for Windows writes into the repository that are wrong on Linux.
 for key in core.ignorecase core.symlinks core.filemode core.autocrlf core.fsmonitor core.untrackedcache; do
@@ -794,8 +791,6 @@ fi
 if [ -f .gitmodules ]; then
   git submodule update -q --init --recursive || echo "warning: couldn't check out the submodules" >&2
 fi
-[ -z "$2" ] || git config --global user.name "$2"
-[ -z "$3" ] || git config --global user.email "$3"
 EOS
 '@
         } else {
@@ -817,6 +812,22 @@ $E exec -u dev -w "$dir" "$name" sh -c 'for f in mvnw gradlew; do [ ! -f "$f" ] 
         if ($listFile) { Remove-Item -LiteralPath $listFile -ErrorAction SilentlyContinue }
     }
 
+    # Your Git identity, for commits made in the container, whether or not the
+    # project is a repository yet. Read in the project, so a repository's own
+    # user.name/user.email wins over your global ones.
+    if ($GitPath) {
+        $gitName = (Invoke-Git 'config', 'user.name').Output
+        $gitEmail = (Invoke-Git 'config', 'user.email').Output
+        if ($gitName -or $gitEmail) {
+            $null = Invoke-Wsl -Variables @{ name = $ContainerName; git_name = $gitName; git_email = $gitEmail } @'
+[ -z "$git_name" ] || $E exec -u dev "$name" git config --global user.name "$git_name"
+[ -z "$git_email" ] || $E exec -u dev "$name" git config --global user.email "$git_email"
+'@
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Couldn't set your Git identity in the container." }
+        }
+    }
+
+    Assert-SshAnswers $Port
     Write-ConnectionInfo $Port $privateKeyPath
 } finally {
     try { [Console]::OutputEncoding = $previousOutputEncoding } catch { }
