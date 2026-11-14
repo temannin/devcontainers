@@ -115,17 +115,6 @@ RUN apt-get update \
       fontconfig libfreetype6 libxext6 libxrender1 libxtst6 libxi6 \
  && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_*
 
-# The GitHub CLI, from GitHub's apt repository. The script logs it in with
-# your Windows gh's token, and Git uses it for https://github.com credentials.
-RUN install -d -m 755 /etc/apt/keyrings \
- && curl -fsSL -o /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg \
- && chmod 644 /etc/apt/keyrings/githubcli-archive-keyring.gpg \
- && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-      > /etc/apt/sources.list.d/github-cli.list \
- && apt-get update \
- && apt-get install -y --no-install-recommends gh \
- && rm -rf /var/lib/apt/lists/*
-
 # Maven, for projects without a wrapper (./mvnw) and for the terminal. Ubuntu's
 # package would pull in a second JDK, so it comes from Maven Central (which
 # keeps every release), checked against the SHA-512 published there.
@@ -348,9 +337,8 @@ esac
 }
 
 # Gives the container your GitHub login: the token of the gh CLI on Windows
-# goes to the container's gh, which Git then uses for https://github.com. Run
-# on every start, so a new login on Windows carries over. Containers whose image
-# predates gh get the token in Git's credential store instead.
+# goes into Git's credential store in the container, for https://github.com.
+# Run on every start, so a new login on Windows carries over.
 function Set-GitHubAuth {
     $gh = Get-Command gh.exe -ErrorAction SilentlyContinue
     if (-not $gh) { return }
@@ -361,18 +349,13 @@ function Set-GitHubAuth {
         return
     }
     $null = Invoke-Wsl -Variables @{ name = $ContainerName; token = $token } @'
-if $E exec -u dev "$name" sh -c 'command -v gh' >/dev/null 2>&1; then
-  printf '%s\n' "$token" | $E exec -i -u dev "$name" gh auth login --hostname github.com --git-protocol https --with-token
-  $E exec -u dev "$name" gh auth setup-git --hostname github.com
-else
-  printf 'https://x-access-token:%s@github.com\n' "$token" \
-    | $E exec -i -u dev "$name" sh -c 'umask 077 && cat > "$HOME/.git-credentials" && git config --global credential.https://github.com.helper store'
-fi
+printf 'https://x-access-token:%s@github.com\n' "$token" \
+  | $E exec -i -u dev "$name" sh -c 'umask 077 && cat > "$HOME/.git-credentials" && git config --global credential.https://github.com.helper store'
 '@
     if ($LASTEXITCODE -eq 0) {
         Write-Host 'GitHub: the container uses your gh login for https://github.com.'
     } else {
-        Write-Warning "Couldn't pass your GitHub login to the container; run 'gh auth login' inside it instead."
+        Write-Warning "Couldn't pass your GitHub login to the container."
     }
 }
 
