@@ -22,7 +22,10 @@ RUN apt-get update -qq && \
 
 COPY --from=nix /nix /nix
 
-ENV PATH="/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin:${PATH}" \
+# Nix after Debian's directories: the nixos/nix default profile has its own
+# bash, which doesn't read /etc/bash.bashrc (and so never enters the dev
+# shell), so `bash` has to resolve to Debian's /bin/bash.
+ENV PATH="${PATH}:/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin" \
     NIX_SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt" \
     WORKSPACE="/workspace"
 
@@ -38,9 +41,20 @@ RUN mkdir -p /etc/nix && printf '%s\n' \
 # GC drops the nixpkgs-unstable source fetched to evaluate it.
 RUN nix profile add github:NixOS/nixpkgs/nixos-unstable#pi-coding-agent && nix-collect-garbage
 
+# Login shells run Debian's /etc/profile, which resets PATH and so drops Nix.
+# Put it back: from profile.d for every login shell, and from devshell.sh
+# because /etc/profile sources /etc/bash.bashrc before profile.d.
+COPY <<'EOF' /etc/profile.d/nix.sh
+case ":${PATH}:" in
+  *:/nix/var/nix/profiles/default/bin:*) ;;
+  *) export PATH="${PATH}:/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin" ;;
+esac
+EOF
+
 # Load the dev shell of $WORKSPACE/flake.nix into the current bash session.
 # Cached per flake.nix + flake.lock, so later shells in a container start fast.
 COPY <<'EOF' /usr/local/lib/nix-pi/devshell.sh
+. /etc/profile.d/nix.sh
 if [ -z "${IN_NIX_SHELL:-}" ] && [ -f "${WORKSPACE}/flake.nix" ]; then
   __devshell_key=$(cat "${WORKSPACE}/flake.nix" "${WORKSPACE}/flake.lock" 2>/dev/null | sha256sum | cut -c1-16)
   __devshell_env="${XDG_CACHE_HOME:-$HOME/.cache}/nix-pi/env-${__devshell_key}.sh"
